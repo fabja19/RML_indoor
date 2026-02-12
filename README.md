@@ -2,7 +2,7 @@ This repository contains the code used for the paper "Radio Map Prediction from 
 
 # Overview of the Code
 - *lib* contains model architectures, dataset and training/testing logic
-- the scripts in the main folder are used to run raining/testing with different parameters for trained models and baselines
+- the scripts in the main folder are used to run training/testing with different parameters for trained models and baselines
 - *data_seminar_room* contains the data from measurements and RT simulations
 - the dataset from TBD is expected to be placed under *./dataset*
 - *env* contains .yml files describing the mamba env we used
