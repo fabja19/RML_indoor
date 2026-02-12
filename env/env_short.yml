@@ -1,0 +1,22 @@
+name: cuda124
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python[version='>=3.12']
+  - pytorch
+  - torchvision
+  - pytorch-lightning=2.5
+  - pytorch-gpu=2.5
+  - matplotlib
+  - scikit-image
+  - torchinfo
+  - tensorboard
+  - ipykernel
+  - pandas
+  - ca-certificates
+  - certifi
+  - openssl
+  - h5py
+  - pip
+prefix: /home/fabianjaensch/.conda/envs/env_mamba/envs/cuda124
