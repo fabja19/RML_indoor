@@ -129,6 +129,39 @@ def calc_loss_with_mask(
     
     return loss_combined
 
+def calc_loss_with_mask_exp_avg(        
+        pred : torch.Tensor, 
+        target : torch.Tensor, 
+        mask : torch.Tensor, 
+        metrics : dict | None,
+        sample_id : list[torch.Tensor|list[torch.Tensor]],
+        labels_old : dict[tuple[int,int], torch.Tensor],
+        exp_avg_momentum : float, 
+        exp_avg_warmup : int,
+        epoch : int,
+        reduction : str = 'mean',
+    ) -> tuple[torch.Tensor,torch.Tensor]:
+    if epoch == 0:
+        ### fill dict of ground truths
+        for k in range(len(sample_id[0])):
+            key = (sample_id[0][k].item(), sample_id[1][k].item())
+            transform_params = (sample_id[2][0][k].item(), sample_id[2][1][k].item())
+            assert not key in labels_old.keys(), f'{key=} already exists in labels_old!'
+            labels_old[key] = CustomTransformReverse(target[k], transform_params)
+    if epoch <= exp_avg_warmup:
+        target_here = target
+    else:
+        target_new_list = []
+        for k in range(len(sample_id[0])):
+            key = (sample_id[0][k].item(), sample_id[1][k].item())
+            transform_params = sample_id[2][0][k].item(), sample_id[2][1][k].item()
+            labels_old[key] = labels_old[key] * exp_avg_momentum + (1 - exp_avg_momentum) * CustomTransformReverse(pred[k].detach(),  transform_params)
+            target_new_list.append(CustomTransformFunctional(labels_old[key], params=transform_params))
+
+        target_here = torch.stack(target_new_list, 0)
+    loss = calc_loss_with_mask(pred=pred, target=target_here, mask=mask, observation_mask=None, alpha=1, metrics=metrics, reduction=reduction)
+    return loss, target_here
+
 
 def print_metrics(
         metrics : dict[str,float], 
@@ -165,6 +198,8 @@ def train_model(
         dataloaders : dict[str,DataLoader], 
         num_epochs : int,
         pred_steps : int = 1,
+        exp_avg_momentum : float = 1,
+        exp_avg_warmup : int = 5
     ) -> nn.Module:
     """
     Trains a PyTorch model using the provided optimizer, scheduler, and dataloaders for a specified number of epochs.
@@ -173,16 +208,16 @@ def train_model(
         model (nn.Module): The PyTorch model to train.
         optimizer (torch.optim.Optimizer): Optimizer for updating model parameters.
         scheduler (torch.optim.lr_scheduler.ReduceLROnPlateau): Learning rate scheduler.
-        alpha (float): Weight for full map loss vs observation loss (0 <= alpha <= 1).
-            Final loss = alpha * (full_map_loss) + (1-alpha) * (observation_loss).
         str_dir (Path): Directory path for saving logs and plots.
         stringerI (Path): File path to save the best model state dict.
         dataloaders (dict[str, DataLoader]): Dictionary containing 'train' and 'val' DataLoaders.
         num_epochs (int, optional): Number of training epochs.
-        pred_steps (int, optional): Number of autoregressive prediction steps (>1 feeds output back to model). Default is 1.
+        pred_steps (int=1): Give value >1 to feed the output again into the model to enhance the RM.
     Returns:
         nn.Module: The trained model with the best validation loss.
     """
+    if exp_avg_momentum < 1:
+        assert getattr(dataloaders['train'].dataset, 'return_sample_id', False)
     best_model = copy.deepcopy(model.state_dict())
     best_loss = 1e10
     device = next(model.parameters()).device
@@ -242,7 +277,11 @@ def train_model(
                     outputs1 = model(inputs)
                     
                     # Loss is computed against full dense ground truth
-                    loss = calc_loss_with_mask(pred=outputs1, target=targets, mask=mask, observation_mask=observation_mask, alpha=alpha, metrics=metrics)
+                    if exp_avg_momentum == 1 or phase=='val':
+                        loss = calc_loss_with_mask(pred=outputs1, target=targets, mask=mask, observation_mask=observation_mask, alpha=alpha, metrics=metrics)
+                        target_smooth = None
+                    else:
+                        loss, target_smooth = calc_loss_with_mask_exp_avg(pred=outputs1, target=targets, mask=mask, metrics=metrics, exp_avg_momentum=exp_avg_momentum, exp_avg_warmup=exp_avg_warmup, sample_id=sample_id, epoch=epoch, labels_old=labels_old)
 
 
                     if phase == 'train':
@@ -252,6 +291,8 @@ def train_model(
                     epoch_samples += inputs.size(0)
 
                     if pred_steps > 1:
+                        if exp_avg_momentum == 1:
+                            raise NotImplementedError(f'We havent implemented pred_steps > 1 combined with exponential moving average GT.')
                         for step in range(pred_steps - 1):
                             inputs[:,-1,...] = torch.repeat_interleave(torch.repeat_interleave(outputs1.detach().squeeze(1), repeats=inputs.shape[-2] // outputs1.shape[-2], dim=-2), repeats=inputs.shape[-1] // outputs1.shape[-1], dim=-1)
                             outputs1 = model(inputs)
@@ -289,18 +330,24 @@ def train_model(
                     else:
                         pl_min_plot = min(torch.amin(tens[tens > 0]) for tens in tens_to_check)
                         pl_max_plot = max(torch.amax(tens[tens > 0]) for tens in tens_to_check)
-                    tensor_dict.update({
-                        f'samples{k}' : (inputs[k,-3:-2], pl_min_plot, pl_max_plot),
-                        f'dist/fspl{k}' : (inputs[k,-1:], 0, 1),
-                        f'targets{k}, RMSE={float(torch.sqrt(loss_per_sample[k]).numpy(force=True)) * (pl_max - pl_trnc):.1f}dB' : (targets[k], pl_min_plot, pl_max_plot),
-                        f'outputs{k} (clipped)'  : (outputs1[k] * mask[k], pl_min_plot, pl_max_plot)
-                    })
-
+                    try:
+                            tensor_dict.update({
+                            f'samples{k}' : (inputs[k,-3:-2], pl_min_plot, pl_max_plot),
+                            f'dist/fspl{k}' : (inputs[k,-1:], 0, 1),
+                            f'targets{k}, RMSE={float(torch.sqrt(loss_per_sample[k].squeeze()).numpy(force=True)) * (pl_max - pl_trnc):.1f}dB' : (targets[k], pl_min_plot, pl_max_plot),
+                            f'outputs{k} (clipped)'  : (outputs1[k] * mask[k], pl_min_plot, pl_max_plot)
+                        })
+                    except:
+                        raise ValueError(f'{loss_per_sample.shape=}')
+                    if target_smooth is not None:
+                        tensor_dict.update({
+                            f'target smooth{k}' : (target_smooth[k] * mask[k], pl_min_plot, pl_max_plot)
+                        })
                 plot_dict(tensor_dict=tensor_dict,
                     in_batch_id=None,
                     save_path=str_dir / f'{phase}_sample_{epoch=}',
                     suptitle=f'Batch RMSE = {float(torch.sqrt(loss_per_sample.sum() / inputs.size(0)).numpy(force=True)) * (pl_max - pl_trnc):.1f}dB',
-                    n_cols=4
+                    n_cols=4 if target_smooth is None else 5
                 )
 
 
@@ -632,7 +679,7 @@ def test_model(
                 tensor_dict.update({
                     f'samples{k}' : (inputs[k,-3:-2], pl_min_plot, pl_max_plot),
                     f'dist{k}' : (inputs[k,-1:], 0, 1),
-                    f'targets{k}, RMSE={float(torch.sqrt(loss[k]).numpy(force=True)) * (pl_max - pl_trnc):.1f}dB' : (targets[k], pl_min_plot, pl_max_plot),
+                    f'targets{k}, RMSE={float(torch.sqrt(loss[k].squeeze()).numpy(force=True)) * (pl_max - pl_trnc):.1f}dB' : (targets[k], pl_min_plot, pl_max_plot),
                     f'outputs{k} (masked)'  : (outputs1[k] * mask[k], pl_min_plot, pl_max_plot),
                     f'outputs{k} (full)'  : outputs1[k]
                 })
@@ -785,6 +832,8 @@ def plot_dict(tensor_dict: dict, in_batch_id: int | None, save_path: Path | None
             vmax = None
         elif len(entry) == 3:
             tensor, vmin, vmax = entry
+        else:
+            raise ValueError(f'Expected either tensor or (tensor, vmin, vmax), but \n{entry=}')
 
         t = tensor[in_batch_id] if in_batch_id is not None else tensor
         arr = t.detach().cpu().numpy()

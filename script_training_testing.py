@@ -283,6 +283,8 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--env-tx-subdir", type=str, default=None, help="Optional dir for tx locations, otherwise uses ")
     parser.add_argument("-pt", "--perturb-tx", action="store_true", default=None, help="Enable only transmitter position perturbation.")
     parser.add_argument("-pr", "--perturb-rasters", action="store_true", default=None, help="Enable only raster perturbation.")
+    parser.add_argument("-mom", "--momentum", type=float, default=1, help="For self adaptive training, when set to value >1. This did not provide improvements for the models with binary inputs in our tests.")
+    parser.add_argument("-w", "--warmup", type=int, default=5, help="For self adaptive training")
     args = parser.parse_args()
 
     sample_id_file = "split_rectangular_L-shaped_val=0.1_test=0.1.json"

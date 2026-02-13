@@ -31,14 +31,13 @@ def main(
             main_standard(logs_dir=None, dry_run=False, run_dir=run_dir, skip_images=skip_images, pert=pert, env_raster_subdir=env_raster_subdir)
 
 
-    ### no pert
-    if not no_obs:
-        main_obs(logs_dir=None, dry_run=False, run_dir=run_dir, skip_images=skip_images, pert=False)
-        ### standard pert is with 0.5m, add also with 0.25 amd 1m
-        for env_raster_subdir in raster_list:
-            ### perturb both, only Tx and only rasters
-            for pert in [True, 'tx', 'rasters']:
-                main_obs(logs_dir=None, dry_run=False, run_dir=run_dir, skip_images=skip_images, pert=pert, env_raster_subdir=env_raster_subdir)
+    
+    main_obs(logs_dir=None, dry_run=False, run_dir=run_dir, skip_images=skip_images, pert=False)
+    ### standard pert is with 0.5m, add also with 0.25 amd 1m
+    for env_raster_subdir in raster_list:
+        ### perturb both, only Tx and only rasters
+        for pert in [True, 'tx', 'rasters']:
+            main_obs(logs_dir=None, dry_run=False, run_dir=run_dir, skip_images=skip_images, pert=pert, env_raster_subdir=env_raster_subdir)
 
 
 if __name__ == '__main__':
@@ -52,7 +51,7 @@ if __name__ == '__main__':
     parser.add_argument("-i", "--images", action='store_true', 
                         help="Save prediction images (default: skip images)")
     parser.add_argument("-b", "--bin", action='store_true', 
-                        help="Binary run")
+                        help="For models trained with binary inputs.")
     parser.add_argument("-no", "--no-obs", action='store_true', 
                         help="Run without observations used")
     

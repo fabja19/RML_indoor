@@ -23,6 +23,10 @@ If you use the code or dataset in your work, please cite:
 - *lib* contains model architectures, dataset and training/testing logic
 - the scripts in the main folder are used to run training/testing with different parameters for trained models and baselines
 - *script_training_testing.py* is used to train the models and runs a basic test on the synthetic data with the same (potentially random) observation percentage as during training
+      - by default, models are trained with classes as inputs
+      - for binary input: -r rasterized_projects_256x256_bin
+      - for material properties: -nc -mp
+      - for more options, please see the help of the script
 - *script_combined_tests.py* runs more detailed tests for different fixed observation percentages per run and for different levels of noise severity and different types of noise/perturbations
 - *script_baselines_obs_perc.py* is used to test baselines on for varying observation percentage on the synthetic test set
 - the dataset from (to be added) is expected to be placed under *./dataset*
@@ -32,4 +36,4 @@ If you use the code or dataset in your work, please cite:
 ![rms](./figs/env.png "Dataset")
 # Links
 - the code for the generation of indoor environments is available at https://github.com/fabja19/WI_indoor_projects
-- the dataset will be uploaded in the next days to Zenodo, we will place the link here
+- the dataset and some model checkpoints will are available on [https://zenodo.org/uploads/18631406](https://zenodo.org/uploads/18631406)
