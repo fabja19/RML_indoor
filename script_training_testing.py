@@ -251,7 +251,8 @@ def main(
 
 if __name__ == "__main__":
     import argparse
-    parser = argparse.ArgumentParser(description="Train and test RadioUNet or RadioNetAdapt model.")
+    parser = argparse.ArgumentParser(description="Train and test RadioUNet or RadioNetAdapt model. " \
+            "For binary inputs, give -r rasterized_projects_256x256_bin. For material property inputs give -nc -mp.")
     parser.add_argument("-o", "--observation-percentage", type=float, default=0., help="Fraction of pixels to sample as given observations from ground truth RM.")
     parser.add_argument("-o2", "--observation-percentage2", type=float, default=20., help="Give a second obsdervation percentage value o2 to draw observation_percentage randomly for each sample from the interval [o, o2].\
                         If o2<=o, we ignore it and we use o as a fixed value.")
