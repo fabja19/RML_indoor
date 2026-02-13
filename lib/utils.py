@@ -1057,3 +1057,33 @@ def tps_interpolate(
         except ZeroDivisionError:
             interpolated.append(torch.ones(SHAPE_TARGET) * np.nan)
     return torch.stack(interpolated).unsqueeze(1)
+
+
+def get_rm_adjusted(inputs : torch.Tensor, observation_mask : torch.Tensor, rm : torch.Tensor) -> torch.Tensor:
+    """
+    Adjusts ray-tracing radio map by computing offset from sparse measurements.
+
+    Calculates the mean difference between observed measurements and ray-tracing predictions,
+    then applies this offset to the entire radio map for calibration. (MMSE)
+
+    Args:
+        inputs (torch.Tensor): Sparse measurement observations with shape (B, C, H, W).
+        observation_mask (torch.Tensor): Binary mask indicating measurement locations with shape (B, 1, H, W).
+        rm (torch.Tensor): Ray-tracing radio map predictions with shape (B, C, H, W).
+
+    Returns:
+        torch.Tensor: Adjusted radio map with the same shape as rm.
+
+    Raises:
+        Exception: If tensor shapes are incompatible or computation fails.
+    """
+    offset = None
+    try:
+        offset = 1 / torch.sum(observation_mask, (-1, -2), keepdim=True) * torch.sum(torch.where(observation_mask, inputs - rm, 0), (-1, -2), keepdim=True)
+        return rm + offset
+    except Exception as e:
+        if offset is None:
+            print(f'offset is None')
+        else:
+            print(f'{offset.shape=}')
+        raise Exception(f'{inputs.shape=}\t{observation_mask.shape=}\t{rm.shape=}\n{e}')

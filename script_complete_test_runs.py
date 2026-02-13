@@ -296,7 +296,6 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    # Convert pert string to appropriate type
     pert_val = args.pert
     if isinstance(pert_val, str):
         if pert_val.lower() in ['true', '1']:
